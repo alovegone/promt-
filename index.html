@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Prompt Studio | v12.7 Click-Select Stable</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono&family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root{ --accent:#4F46E5; --text:#1a1a1a; --bg:#fafafa; --border:#e5e5e5; --radius:16px; }
+    body{ font-family:'Plus Jakarta Sans','Noto Sans SC',sans-serif; background:var(--bg); color:var(--text); overflow-x: hidden; scroll-behavior: smooth; }
+    #sidebarContainer { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); width: 280px; }
+    #sidebarContainer.is-collapsed { width: 60px; }
+    #sidebarContainer.is-collapsed .hide-on-collapse { display: none; }
+    #sidebarContainer.is-collapsed aside { padding: 1.5rem 0.5rem; align-items: center; }
+    #sidebarOutline { max-height: calc(100vh - 420px); overflow-y: auto; scrollbar-width: thin; }
+    #sidebarOutline::-webkit-scrollbar { width: 4px; }
+    #sidebarOutline::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+    
+    .outline-item { border-left: 3px solid transparent; transition: all 0.2s; cursor: pointer; user-select: none; position: relative; }
+    .outline-item:hover { background: #f8fafc; border-left-color: #cbd5e1; }
+    .outline-active { background: #eef2ff !important; border-left-color: var(--accent) !important; }
+    
+    .progress-bar-container { width: 100%; height: 3px; background: #f1f5f9; border-radius: 10px; margin-top: 6px; overflow: hidden; }
+    .progress-fill { height: 100%; width: 0%; transition: all 0.5s ease; border-radius: 10px; }
+    .progress-processing { background: #3b82f6; width: 60%; animation: pulse-width 2s infinite ease-in-out; }
+    .progress-completed { background: #22c55e; width: 100% !important; }
+    @keyframes pulse-width { 0% { opacity: 0.6; width: 40%; } 50% { opacity: 1; width: 80%; } 100% { opacity: 0.6; width: 40%; } }
+
+    .card-pro{ background:#fff; border:1px solid var(--border); border-radius:var(--radius); transition:all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+    .card-focus-highlight { border-color: var(--accent) !important; box-shadow: 0 0 0 4px rgba(79,70,229,0.15) !important; transform: scale(1.01); }
+    .input-flat{ width:100%; padding:.75rem; background:#fdfdfd; border:1px solid #eee; border-radius:14px; font-size:.875rem; outline:none; }
+    .input-flat:focus{ border-color:var(--accent); background:#fff; box-shadow:0 0 0 3px rgba(79,70,229,.12); }
+    
+    /* 标签样式维持 v12.5 */
+    .tag-pill{ display:inline-flex; align-items:center; gap:.35rem; padding:.18rem .5rem; background:rgba(79,70,229,0.08); color:rgba(79,70,229,1); border:1px solid rgba(79,70,229,0.15); border-radius:10px; font-size:11px; font-weight:700; user-select:none; }
+    
+    /* 【新增】平铺点选按钮样式 */
+    .preset-chip { cursor: pointer; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 600; border: 1px solid #eee; background: #f8fafc; color: #64748b; transition: all 0.2s; user-select: none; }
+    .preset-chip:hover { border-color: var(--accent); color: var(--accent); }
+    .preset-chip.active { background: var(--accent); color: white; border-color: var(--accent); box-shadow: 0 4px 10px -2px rgba(79,70,229,0.3); }
+
+    .nav-glass{ background:rgba(255,255,255,0.82); backdrop-filter:blur(10px); border-bottom:1px solid #eee; }
+    .editor-container{ background:#0d0d0d; border-radius:18px; margin-top:1rem; overflow:hidden; display:none; animation: slideIn .15s ease; }
+    .editor-container.is-open{ display:block; }
+    @keyframes slideIn{ from{transform:translateY(-5px);opacity:0;} to{transform:translateY(0);opacity:1;} }
+    .editor-textarea{ width:100%; height:12rem; padding:1.1rem 1.25rem; background:transparent; color:#e0e0e0; font-family:'JetBrains Mono', monospace; font-size:13px; line-height:1.7; outline:none; resize:none; }
+    .modal{ display:none; }
+    .modal.is-open{ display:flex; }
+    .no-scrollbar::-webkit-scrollbar{ display:none; }
+    #chatWidget { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 200; display: flex; flex-direction: column; align-items: flex-end; }
+    #chatToggle { width: 56px; height: 56px; border-radius: 28px; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 10px 25px -5px rgba(79,70,229,0.4); }
+    #chatPanel { width: 360px; height: 500px; background: white; border-radius: 24px; box-shadow: 0 20px 50px -12px rgba(0,0,0,0.15); margin-bottom: 1rem; display: none; flex-direction: column; overflow: hidden; border: 1px solid #eee; border-bottom: 4px solid var(--accent); }
+    #chatPanel.is-open { display: flex; animation: chatUp 0.3s ease; }
+    .msg-user { align-self: flex-end; background: var(--accent); color: white; border-radius: 18px 18px 4px 18px; padding: 0.75rem 1rem; font-size: 13px; max-width: 85%; }
+    .msg-ai { align-self: flex-start; background: #f1f5f9; color: #334155; border-radius: 18px 18px 18px 4px; padding: 0.75rem 1rem; font-size: 13px; max-width: 85%; }
+    /* 拖拽占位符样式 */
+    .sortable-ghost { opacity: 0.4; background: #eef2ff !important; border: 2px dashed var(--accent) !important; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+  <nav class="nav-glass sticky top-0 z-50 px-6 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-6">
+      <div class="flex items-center gap-2 select-none">
+        <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-lg italic shadow-lg shadow-indigo-100">S</div>
+        <span class="font-bold tracking-tight text-slate-800">Prompt Studio <span class="text-indigo-600 opacity-50">12.7</span></span>
+      </div>
+      <div class="flex items-center gap-1 px-2 py-1 bg-slate-50 border rounded-full hover:bg-slate-100 transition-colors">
+        <select id="apiPresetSelect" class="bg-transparent outline-none cursor-pointer text-[11px] font-bold text-slate-500 pl-2"></select>
+        <span id="apiStatusDot" class="w-1.5 h-1.5 rounded-full bg-slate-300 mx-1"></span>
+        <button data-action="open-list" data-type="api" class="p-1 text-slate-400 hover:text-indigo-600"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path></svg></button>
+      </div>
+    </div>
+    <div class="flex items-center gap-4">
+      <button data-action="add-card" class="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-indigo-600 transition-all">+ 新增卡片</button>
+      <button data-action="open-process-modal" class="px-5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md hover:bg-indigo-700 transition-all">⚡ 批量执行</button>
+    </div>
+  </nav>
+
+  <div id="processModal" class="modal fixed inset-0 bg-black/40 items-center justify-center z-[120] backdrop-blur-sm p-4">
+    <div class="bg-white rounded-[2rem] p-8 w-full max-w-sm shadow-2xl">
+      <h3 class="text-lg font-bold mb-2">执行范围设定</h3>
+      <p class="text-xs text-slate-400 mb-6">当前共有 <span id="totalCardsCount" class="text-indigo-600 font-bold">0</span> 个分镜</p>
+      <div class="space-y-4">
+        <div class="grid grid-cols-2 gap-4">
+          <div class="space-y-1">
+            <label class="text-[10px] font-bold text-slate-400 uppercase">起始镜号</label>
+            <input id="rangeStart" type="number" value="1" min="1" class="input-flat">
+          </div>
+          <div class="space-y-1">
+            <label class="text-[10px] font-bold text-slate-400 uppercase">结束镜号</label>
+            <input id="rangeEnd" type="number" value="1" min="1" class="input-flat">
+          </div>
+        </div>
+        <button data-action="confirm-process" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all">确认并执行</button>
+        <button data-action="close-process-modal" class="w-full py-2 text-slate-400 text-sm font-medium">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex-1 flex max-w-[1600px] mx-auto w-full px-6 pt-8 gap-8 relative">
+    <div id="sidebarContainer" class="flex-shrink-0 hidden xl:block sticky top-24 h-[calc(100vh-120px)]">
+      <aside class="w-full h-full bg-white border border-slate-200 rounded-3xl p-5 flex flex-col shadow-sm">
+        <div class="flex items-center justify-between mb-6">
+          <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest hide-on-collapse">STORY OUTLINE</h3>
+          <button id="toggleSidebar" class="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400">
+            <svg id="toggleIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path></svg>
+          </button>
+        </div>
+        <div id="sidebarOutline" class="flex-1 space-y-1 hide-on-collapse"></div>
+        <div class="mt-6 pt-6 border-t border-slate-100 space-y-4">
+            <div id="repoPanels" class="space-y-4 hide-on-collapse"></div>
+            <div class="space-y-1">
+                <button data-action="backup" class="w-full flex items-center p-2 text-xs font-bold text-slate-500 hover:bg-slate-50 rounded-xl">💾 <span class="hide-on-collapse ml-2">备份数据库</span></button>
+                <button data-action="open-restore" class="w-full flex items-center p-2 text-xs font-bold text-slate-500 hover:bg-slate-50 rounded-xl">📂 <span class="hide-on-collapse ml-2">导入还原</span></button>
+                <input type="file" id="restoreInput" accept=".json" class="hidden">
+                <button data-action="open-csv" class="w-full flex items-center p-2 text-xs font-bold text-amber-600 hover:bg-amber-50 rounded-xl">📥 <span class="hide-on-collapse ml-2">导入 CSV 分镜</span></button>
+                <input type="file" id="csvInput" accept=".csv" class="hidden">
+            </div>
+        </div>
+      </aside>
+    </div>
+
+    <main class="flex-1 min-w-0 pb-20">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest">Workspace / Tasks</h2>
+        <button data-action="export-csv" class="text-xs font-bold text-emerald-600 hover:underline">导出全部结果 (CSV)</button>
+      </div>
+      <div id="cardContainer" class="space-y-6"></div>
+    </main>
+  </div>
+
+  <div id="chatWidget">
+    <div id="chatPanel">
+      <div class="p-4 border-b flex justify-between items-center bg-slate-50/50 backdrop-blur-md">
+        <div class="flex items-center gap-2">
+            <div class="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse"></div>
+            <span class="text-[11px] font-black uppercase tracking-widest text-slate-600">AI Creative Copilot</span>
+        </div>
+        <button id="closeChat" class="text-slate-400 hover:text-slate-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+      </div>
+      <div id="chatHistory" class="flex-1 overflow-y-auto p-4 space-y-4 bg-white flex flex-col no-scrollbar"></div>
+      <div class="p-4 bg-white border-t border-slate-50">
+        <div class="relative flex items-center">
+            <input id="chatInput" type="text" placeholder="输入灵感或指令..." class="w-full p-3 pr-12 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none focus:border-indigo-300 focus:bg-white transition-all">
+            <button id="sendChat" class="absolute right-2 p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg></button>
+        </div>
+      </div>
+    </div>
+    <div id="chatToggle"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg></div>
+  </div>
+
+  <div id="listModal" class="modal fixed inset-0 bg-black/20 items-center justify-center z-[100] backdrop-blur-sm p-4">
+    <div class="bg-white rounded-3xl p-8 w-full max-w-xl shadow-2xl">
+      <div class="flex justify-between items-center mb-6"><h3 id="listModalTitle" class="text-xl font-bold">管理</h3><button data-action="open-edit" class="text-indigo-600 font-bold">+ 新增</button></div>
+      <div id="itemList" class="max-h-96 overflow-y-auto space-y-2"></div>
+      <div class="mt-8 flex justify-end"><button data-action="close-list" class="px-8 py-2 bg-slate-100 rounded-xl font-bold">关闭</button></div>
+    </div>
+  </div>
+  <div id="editModal" class="modal fixed inset-0 bg-black/40 items-center justify-center z-[110] p-4">
+    <div id="editModalContent" class="bg-white rounded-[2rem] p-10 w-full max-w-md shadow-2xl border border-white"></div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'prompt_studio_v12_7';
+    let repo = JSON.parse(localStorage.getItem(STORAGE_KEY)) || { role: [], scene: [], instruction: [], api: [] };
+    
+    function saveRepo() { 
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(repo)); 
+        initRepoUI(); 
+        updateAllCards(); 
+    }
+
+    let currentAPI = null, currentType = '', editingIndex = -1;
+    const types = [ { id: 'role', label: '角色预设' }, { id: 'scene', label: '场景预设' }, { id: 'instruction', label: '执行指令' }, { id: 'api', label: '接口配置' } ];
+    const $ = (sel, root=document) => root.querySelector(sel);
+    const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+    const showModal = el => el.classList.add('is-open');
+    const hideModal = el => el.classList.remove('is-open');
+    const escapeHtml = s => (s ?? '').toString().replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#39;");
+
+    // Chat Logic
+    const chatToggle = $('#chatToggle'), chatPanel = $('#chatPanel'), chatHistory = $('#chatHistory'), chatInput = $('#chatInput'), sendChat = $('#sendChat'), closeChat = $('#closeChat');
+    chatToggle.onclick = () => chatPanel.classList.toggle('is-open');
+    closeChat.onclick = () => chatPanel.classList.remove('is-open');
+
+    function appendChatMsg(role, text) {
+        const msg = document.createElement('div');
+        msg.className = role === 'user' ? 'msg-user' : 'msg-ai';
+        msg.textContent = text;
+        chatHistory.appendChild(msg);
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+
+    async function handleChat() {
+        const text = chatInput.value.trim();
+        const api = currentAPI || repo.api[0];
+        if (!text || !api?.key) return;
+        appendChatMsg('user', text);
+        chatInput.value = '';
+        try {
+            const response = await fetch(`${api.url.replace(/\/+$/,'')}/chat/completions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${api.key}` },
+                body: JSON.stringify({ model: api.model, messages: [{ role: 'system', content: "你是一个专业的编剧。请用中文回答。" }, { role: 'user', content: text }] })
+            });
+            const data = await response.json();
+            appendChatMsg('ai', data?.choices?.[0]?.message?.content || "API 响应异常");
+        } catch (err) { appendChatMsg('ai', "发送失败。"); }
+    }
+    sendChat.onclick = handleChat;
+    chatInput.onkeydown = (e) => { if(e.key === 'Enter') handleChat(); };
+
+    // Card Core Logic
+    function refreshOutline() {
+        const container = $('#sidebarOutline');
+        const cards = $$('.card-item');
+        container.innerHTML = cards.map((card, idx) => {
+            const prompt = $('.row-image-prompt', card).value.trim() || '空分镜...';
+            const status = card.dataset.status || 'idle';
+            let progressClass = '';
+            if (status === 'processing') progressClass = 'progress-processing';
+            if (status === 'completed') progressClass = 'progress-completed';
+
+            return `<div class="outline-item flex flex-col gap-1 p-3 rounded-xl" data-target="${card.id}">
+                    <div class="flex items-center justify-between pointer-events-none">
+                        <span class="text-[10px] font-black text-slate-400 uppercase">分镜 ${idx + 1}</span>
+                        <div class="text-slate-300">⋮⋮</div>
+                    </div>
+                    <span class="text-[11px] font-bold text-slate-600 truncate pointer-events-none">${escapeHtml(prompt)}</span>
+                    <div class="progress-bar-container"><div class="progress-fill ${progressClass}"></div></div>
+                </div>`;
+        }).join('');
+        cards.forEach((card, idx) => {
+            // 同步展示序号 + 导出序号：拖拽排序后按当前顺序重排
+            if ($('.task-badge', card)) $('.task-badge', card).textContent = `TASK #${idx + 1}`;
+            const idxInput = $('.row-index', card);
+            if (idxInput) idxInput.value = String(idx + 1);
+        });
+    }
+
+    function addCard(data = {}) {
+        const id = 'card-' + Date.now() + Math.floor(Math.random() * 1000);
+        const html = `
+            <div id="${id}" class="card-item card-pro p-6 flex flex-col gap-5" data-status="idle">
+                <div class="flex justify-between items-start">
+                    <div class="flex items-center gap-3"><div class="drag-handle w-6 h-8 flex items-center justify-center text-slate-300 cursor-grab hover:text-indigo-500">⋮⋮</div><span class="task-badge text-[10px] font-black bg-slate-900 text-white px-2 py-0.5 rounded tracking-tighter">TASK</span><input type="hidden" class="row-index" value="${escapeHtml(data.index || '')}"></div>
+                    <button data-action="remove-card" class="text-slate-300 hover:text-red-500"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="space-y-2"><label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">原始文案素材</label><textarea class="row-content-display input-flat h-24 text-slate-600" placeholder="仅供记录...">${escapeHtml(data.content || '')}</textarea></div>
+                    <div class="space-y-2"><label class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest">核心画面描述 (原词)</label><textarea class="row-image-prompt input-flat h-24 font-medium" placeholder="例如：一个在雨中奔跑的少年...">${escapeHtml(data.imagePrompt || '')}</textarea></div>
+                </div>
+                <div class="space-y-4">
+                  ${types.filter(t=>t.id!=='api').map(t => `
+                    <div class="space-y-2">
+                      <div class="flex justify-between items-center">
+                        <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest">${escapeHtml(t.label)}</label>
+                      </div>
+                      <div class="preset-chip-group flex flex-wrap gap-2" data-type="${t.id}">
+                        ${repo[t.id].map(item => `<div class="preset-chip" data-name="${escapeHtml(item.name)}" data-type="${t.id}" data-action="toggle-preset-chip">${escapeHtml(item.name)}</div>`).join('')}
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+                <div class="flex justify-between items-center pt-2 border-t border-slate-50"><button data-action="toggle-preview" class="text-xs font-bold text-slate-400 hover:text-indigo-600 flex items-center gap-1">▼ 展开指令微调</button><button data-action="generate" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-lg">✨ AI 润色</button></div>
+                <div class="editor-container"><div class="px-5 py-2 border-b border-white/5 flex justify-between items-center"><span class="text-[9px] font-black text-white/30 uppercase tracking-[0.2em]">Prompt Editor</span><button data-action="reset-auto" class="text-[9px] font-bold text-indigo-400">重置自动生成</button></div><textarea class="editor-textarea no-scrollbar"></textarea></div>
+                <div class="result-area hidden bg-indigo-600 rounded-2xl p-6 text-white"><div class="flex justify-between items-center mb-3"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-white animate-pulse"></span><span class="text-[10px] font-black uppercase tracking-widest opacity-80">AI Result</span></div><button data-action="copy" class="bg-white/10 hover:bg-white/20 px-3 py-1 rounded-lg text-[10px] font-bold border border-white/10">复制</button></div><textarea class="res-content w-full bg-transparent text-sm font-medium outline-none border-none resize-none leading-relaxed h-32 no-scrollbar"></textarea></div>
+            </div>`;
+        $('#cardContainer').insertAdjacentHTML('beforeend', html);
+        const cardEl = document.getElementById(id);
+        $('.row-image-prompt', cardEl).addEventListener('input', () => { updatePreview(id); refreshOutline(); });
+        $('.editor-textarea', cardEl).addEventListener('input', () => updatePreview(id, true));
+        updatePreview(id); refreshOutline();
+    }
+
+    function getTagContents(cardEl, typeId){ 
+        return $$( `.preset-chip[data-type="${typeId}"].active`, cardEl ).map(chip => {
+            const name = chip.dataset.name;
+            const liveItem = repo[typeId].find(i => i.name === name);
+            return liveItem ? liveItem.content : '';
+        }).filter(Boolean).join('; ');
+    }
+    
+    function updatePreview(cardId, isManualUpdate=false) {
+      const card = document.getElementById(cardId); if (!card || isManualUpdate) return;
+      const roleVal = getTagContents(card, 'role'), sceneVal = getTagContents(card, 'scene'), instrTemplates = getTagContents(card, 'instruction');
+      const imagePrompt = $('.row-image-prompt', card).value;
+      const paramList = [];
+      if (roleVal) paramList.push(`角色：${roleVal}`); 
+      if (sceneVal) paramList.push(`场景：${sceneVal}`); 
+      if (imagePrompt) paramList.push(`原词：${imagePrompt}`);
+      let finalOutput = instrTemplates || ""; if (paramList.length > 0) finalOutput += (finalOutput ? "\n\n" : "") + "指令参数：\n" + paramList.join('\n');
+      $('.editor-textarea', card).value = finalOutput.trim() || "等待输入...";
+    }
+
+    function updateAllCards() {
+        $$('.card-item').forEach(card => {
+            types.filter(t => t.id !== 'api').forEach(t => {
+                const group = card.querySelector(`.preset-chip-group[data-type="${t.id}"]`);
+                if (group) {
+                    group.innerHTML = repo[t.id].map(item => 
+                        `<div class="preset-chip" data-name="${escapeHtml(item.name)}" data-type="${t.id}" data-action="toggle-preset-chip">${escapeHtml(item.name)}</div>`
+                    ).join('');
+                }
+            });
+            updatePreview(card.id);
+        });
+    }
+
+    async function generateForCard(cardEl, btnEl){
+      const finalCommand = $('.editor-textarea', cardEl).value, api = currentAPI || repo.api[0];
+      if (!api?.key || !api?.url){ alert("请配置并选择 API"); return; }
+      cardEl.dataset.status = 'processing'; refreshOutline();
+      btnEl.disabled = true; btnEl.textContent = "正在润色...";
+      try {
+        const response = await fetch(`${api.url.replace(/\/+$/,'')}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${api.key}` },
+          body: JSON.stringify({ model: api.model, messages: [{ role: 'system', content: "Optimize for AI image generation. Output in English ONLY." }, { role: 'user', content: finalCommand }] })
+        });
+        const data = await response.json(), content = data?.choices?.[0]?.message?.content?.trim();
+        if (!content) throw new Error();
+        $('.result-area', cardEl).classList.remove('hidden'); $('.res-content', cardEl).value = content;
+        cardEl.dataset.status = 'completed';
+      } catch (err) { alert("接口响应失败"); cardEl.dataset.status = 'idle'; }
+      finally { btnEl.disabled = false; btnEl.textContent = "✨ AI 润色"; refreshOutline(); }
+    }
+
+    function initRepoUI() {
+      const apiSel = $('#apiPresetSelect'), apiIdx = apiSel.value;
+      apiSel.innerHTML = `<option value="">载入接口</option>` + repo.api.map((item, idx) => `<option value="${idx}">${escapeHtml(item.name)}</option>`).join('');
+      if(apiIdx) apiSel.value = apiIdx;
+      $('#repoPanels').innerHTML = types.filter(t => t.id !== 'api').map(t => `
+        <div class="space-y-1">
+          <div class="flex justify-between items-center px-1"><span class="text-[9px] font-bold text-slate-400 uppercase">${escapeHtml(t.label)}</span><button data-action="open-list" data-type="${t.id}" class="text-[9px] text-indigo-500 font-bold">管理</button></div>
+          <select data-action="sync-all" data-type="${t.id}" class="w-full p-2 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-semibold outline-none cursor-pointer"><option value="">应用到全部卡片</option>${repo[t.id].map(item => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`).join('')}</select>
+        </div>
+      `).join('');
+    }
+
+    document.addEventListener('click', async (e) => {
+        const a = e.target.closest('[data-action]');
+        if (e.target.closest('#toggleSidebar')) {
+            const container = $('#sidebarContainer');
+            container.classList.toggle('is-collapsed');
+            $('#toggleIcon').innerHTML = container.classList.contains('is-collapsed') ? '<path d="M13 5l7 7-7 7M5 5l7 7-7 7"/>' : '<path d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>';
+            return;
+        }
+        const outlineItem = e.target.closest('.outline-item');
+        if (outlineItem) {
+            const targetEl = document.getElementById(outlineItem.dataset.target);
+            if (targetEl) {
+                $$('.outline-item').forEach(i => i.classList.remove('outline-active'));
+                outlineItem.classList.add('outline-active');
+                window.scrollTo({ top: targetEl.offsetTop - 80, behavior: 'smooth' });
+                targetEl.classList.add('card-focus-highlight');
+                setTimeout(() => targetEl.classList.remove('card-focus-highlight'), 1200);
+            }
+            return;
+        }
+        if (!a) return;
+        const act = a.dataset.action, card = a.closest('.card-item');
+
+        if (act === 'toggle-preset-chip') {
+            // 仅以 chip 的 active 状态作为选中状态源（不再渲染右侧 tag）
+            a.classList.toggle('active');
+            updatePreview(card.id);
+            return;
+        }
+
+
+        if (act === 'add-card') addCard();
+        if (act === 'open-process-modal') { $('#totalCardsCount').textContent = $$('.card-item').length; showModal($('#processModal')); }
+        if (act === 'close-process-modal') hideModal($('#processModal'));
+        if (act === 'confirm-process') {
+            const start = parseInt($('#rangeStart').value) - 1, end = parseInt($('#rangeEnd').value) - 1, cards = $$('.card-item');
+            if (start < 0 || end >= cards.length || start > end) { alert("范围错误"); return; }
+            hideModal($('#processModal'));
+            for(let i = start; i <= end; i++) {
+                const c = cards[i]; if (!$('.row-image-prompt', c).value.trim()) continue;
+                await generateForCard(c, $('[data-action="generate"]', c));
+            }
+        }
+        if (act === 'open-list') { currentType = a.dataset.type; renderItemList(); showModal($('#listModal')); }
+        if (act === 'close-list') hideModal($('#listModal'));
+        if (act === 'remove-card') { card.remove(); refreshOutline(); }
+        if (act === 'toggle-preview') { $('.editor-container', card).classList.toggle('is-open'); }
+        if (act === 'reset-auto') { $('.editor-textarea', card).value = ''; updatePreview(card.id, false); }
+        if (act === 'generate') await generateForCard(card, a);
+        if (act === 'copy') { navigator.clipboard.writeText($('.res-content', card).value); a.textContent = "已复制"; setTimeout(()=>a.textContent="复制", 1000); }
+        if (act === 'open-edit') openEditModal(currentType, -1);
+        if (act === 'edit-item') openEditModal(currentType, Number(a.dataset.index));
+        if (act === 'delete-item') { if(confirm("删除预设？")){ repo[currentType].splice(Number(a.dataset.index),1); saveRepo(); renderItemList(); } }
+        if (act === 'cancel-edit') hideModal($('#editModal'));
+        if (act === 'confirm-save') confirmSave();
+        if (act === 'backup') { const blob = new Blob([JSON.stringify(repo)], { type: 'application/json' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `Backup.json`; link.click(); }
+        if (act === 'open-restore') $('#restoreInput').click();
+        if (act === 'open-csv') $('#csvInput').click();
+        if (act === 'export-csv') exportCSV();
+    });
+
+    document.addEventListener('change', (e) => {
+        const el = e.target;
+        if (el.id === 'apiPresetSelect') { currentAPI = repo.api[el.value] || null; $('#apiStatusDot').className = currentAPI ? 'w-1.5 h-1.5 rounded-full bg-emerald-500 mx-1' : 'w-1.5 h-1.5 rounded-full bg-slate-300 mx-1'; }
+        if (el.matches('[data-action="sync-all"]')) { 
+            const type = el.dataset.type, val = el.value; if(!val) return;
+            $$('.card-item').forEach(c => {
+                const chip = $$( `.preset-chip[data-type="${type}"]`, c ).find(ch => ch.dataset.name === val);
+                if (chip) chip.classList.add('active');
+                updatePreview(c.id);
+            });
+            el.value = ''; 
+        }
+        if (el.id === 'restoreInput' && el.files[0]) { 
+            const r = new FileReader(); r.onload=(ev)=>{ try{repo=JSON.parse(ev.target.result); saveRepo(); location.reload();}catch(e){alert("失败");} }; r.readAsText(el.files[0]); 
+        }
+        if (el.id === 'csvInput' && el.files[0]) importCSV(el.files[0]);
+    });
+
+    function renderItemList(){ $('#itemList').innerHTML = (repo[currentType] || []).map((item, index) => `<div class="flex justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100"><div class="text-sm font-bold text-slate-700">${escapeHtml(item.name)}</div><div class="flex gap-4"><button data-action="edit-item" data-index="${index}" class="text-indigo-600 text-xs font-bold">编辑</button><button data-action="delete-item" data-index="${index}" class="text-red-500 text-xs font-bold">删除</button></div></div>`).join(''); }
+    
+    function openEditModal(type, index=-1){
+      currentType = type; editingIndex = index; const item = index !== -1 ? repo[type][index] : null;
+      let h = `<h3 class="text-xl font-bold mb-8 tracking-tighter">${index === -1 ? '新增' : '编辑'}${types.find(t=>t.id===type).label}</h3><div class="space-y-5">`;
+      if (type === 'api'){ h += `<input id="m_name" placeholder="名称" class="input-flat" value="${escapeHtml(item?.name)}"><input id=\"m_url\" placeholder=\"URL\" class=\"input-flat\" value=\"${escapeHtml(item?.url || 'https://api.openai.com/v1')}\"><input id=\"m_key\" type=\"password\" placeholder=\"Key\" class=\"input-flat\" value=\"${escapeHtml(item?.key)}\"><input id=\"m_model\" placeholder=\"Model\" class=\"input-flat\" value=\"${escapeHtml(item?.model || 'gpt-4o')}\">`; } 
+      else { h += `<input id="m_name" placeholder="名称" class="input-flat font-bold" value="${escapeHtml(item?.name)}"><textarea id="m_content" rows="6" placeholder="内容" class="input-flat">${escapeHtml(item?.content)}</textarea>`; }
+      h += `</div><div class="flex gap-4 mt-10"><button data-action="cancel-edit" class="flex-1 py-4 text-slate-400 font-bold">取消</button><button data-action="confirm-save" class="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg">保存</button></div>`;
+      $('#editModalContent').innerHTML = h; showModal($('#editModal'));
+    }
+
+    function confirmSave(){
+      const name = ($('#m_name')?.value || '').trim(); if (!name) return;
+      const data = { name };
+      if (currentType === 'api'){ data.url = $('#m_url').value.trim(); data.key = $('#m_key').value.trim(); data.model = $('#m_model').value.trim(); } 
+      else { data.content = $('#m_content').value; }
+      if (editingIndex === -1) repo[currentType].push(data); else repo[currentType][editingIndex] = data;
+      saveRepo(); 
+      hideModal($('#editModal')); renderItemList();
+    }
+
+    function exportCSV(){
+      let csv = "\ufeff序号,图片提示词,视频提示词,首帧提示词,尾帧提示词,文案\n";
+      $$('.card-item').forEach((card, idx) => {
+        const f = (v) => `"${(v || "").toString().replace(/"/g, '""')}"`;
+        const indexVal = (idx + 1);
+        const imagePrompt = f($('.res-content', card).value);
+        const sourceText = f($('.row-content-display', card).value);
+        csv += `${indexVal},${imagePrompt},,,,${sourceText}\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `Export.csv`; link.click();
+    }
+
+    function importCSV(file) {
+      if (typeof Papa === 'undefined' || !Papa?.parse) {
+        alert("CSV 解析库加载失败（PapaParse）。请检查网络或脚本引用。");
+        return;
+      }
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: false,
+        // 处理 UTF-8 BOM，并去掉表头首尾空格
+        transformHeader: (h) => (h || '').toString().replace(/^\uFEFF/, '').trim(),
+        complete: function(results) {
+          const data = results?.data || [];
+          if (!Array.isArray(data) || data.length === 0) {
+            alert("未解析到有效数据，请检查 CSV 格式。");
+            return;
+          }
+
+          $('#cardContainer').innerHTML = '';
+
+          data.forEach((row) => {
+            if (!row || typeof row !== 'object') return;
+
+            // 兼容不同字段名（以本工具导出为主）
+            const idx = row["序号"] ?? row["编号"] ?? row["index"] ?? row["Index"] ?? '';
+            const img = row["图片提示词"] ?? row["image_prompt"] ?? row["Image Prompt"] ?? row["图片提示"] ?? '';
+            const content = row["文案"] ?? row["原始文案"] ?? row["content"] ?? row["Content"] ?? '';
+
+            // 全空行跳过
+            if ((idx === '' || idx == null) && !String(img || '').trim() && !String(content || '').trim()) return;
+
+            addCard({
+              index: String(idx ?? '').trim(),
+              imagePrompt: String(img ?? ''),
+              content: String(content ?? '')
+            });
+          });
+
+          refreshOutline();
+        },
+        error: function(err) {
+          console.error(err);
+          alert("CSV 解析失败，请检查文件是否为标准 CSV（支持单元格内换行/逗号/引号）。");
+        }
+      });
+    }
+
+
+
+    window.addEventListener('load', () => {
+      initRepoUI();
+      // 主工作区排序
+      Sortable.create($('#cardContainer'), { animation: 200, handle: '.drag-handle', onEnd: refreshOutline });
+      // 大纲排序修复：增加了 ghostClass 并确保拖拽后同步主卡片顺序
+      Sortable.create($('#sidebarOutline'), { 
+          animation: 200, 
+          ghostClass: 'sortable-ghost', 
+          onEnd: () => {
+              const items = Array.from($('#sidebarOutline').children), container = $('#cardContainer');
+              items.forEach(item => { 
+                  const card = document.getElementById(item.dataset.target); 
+                  if(card) container.appendChild(card); 
+              }); 
+              refreshOutline();
+          }
+      });
+      if ($('#cardContainer').children.length === 0) addCard();
+      if (repo.api?.length > 0) { currentAPI = repo.api[0]; $('#apiPresetSelect').value = 0; $('#apiStatusDot').className = 'w-1.5 h-1.5 rounded-full bg-emerald-500 mx-1'; }
+      refreshOutline();
+    });
+  </script>
+</body>
+</html>
